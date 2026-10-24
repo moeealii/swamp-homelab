@@ -1,0 +1,55 @@
+id: cb77abc0-4b8c-42ae-8812-0a8c9f63683c
+name: '@moeealii/homelab-health'
+description: Check the whole homelab in one run. Every check is independent, so they run in parallel and one failure does not hide the others.
+jobs:
+  - name: health
+    description: Read NAS, photo library and camera health into swamp data
+    steps:
+      - name: nas-pools
+        description: ZFS pool status and capacity
+        task:
+          type: model_method
+          modelIdOrName: nas
+          methodName: pools
+        dependsOn: []
+        allowFailure: true
+        weight: 0
+      - name: nas-alerts
+        description: Active TrueNAS alerts by severity
+        task:
+          type: model_method
+          modelIdOrName: nas
+          methodName: alerts
+        dependsOn: []
+        allowFailure: true
+        weight: 0
+      - name: nas-apps
+        description: Which apps are running and which have updates
+        task:
+          type: model_method
+          modelIdOrName: nas
+          methodName: apps
+        dependsOn: []
+        allowFailure: true
+        weight: 0
+      - name: photo-queues
+        description: Immich background queue backlog and failures
+        task:
+          type: model_method
+          modelIdOrName: photos
+          methodName: queues
+        dependsOn: []
+        allowFailure: true
+        weight: 0
+      - name: camera-health
+        description: Fetch a live frame from every camera
+        task:
+          type: model_method
+          modelIdOrName: cameras
+          methodName: health
+        dependsOn: []
+        allowFailure: true
+        weight: 0
+    dependsOn: []
+    weight: 0
+version: 1

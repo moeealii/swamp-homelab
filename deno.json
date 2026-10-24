@@ -1,0 +1,18 @@
+{
+  "nodeModulesDir": "none",
+  "tasks": {
+    "check": "deno check extensions/models/",
+    "test": "deno test --allow-net=127.0.0.1 --allow-read extensions/models/"
+  },
+  "fmt": {
+    "lineWidth": 110
+  },
+  "lint": {
+    "rules": {
+      "exclude": [
+        "no-explicit-any",
+        "no-import-prefix"
+      ]
+    }
+  }
+}
