@@ -1,5 +1,5 @@
 /**
- * `@moeealii/truenas`: read the health of a TrueNAS SCALE system (version,
+ * `@me__zlxp/truenas`: read the health of a TrueNAS SCALE system (version,
  * pools, apps, alerts) and start or stop its apps, over the JSON-RPC
  * WebSocket API that TrueNAS 25.10 and later use.
  *
@@ -12,7 +12,7 @@ import { instanceName, now, percent } from "./lib/names.ts";
 /** Global arguments shared by every method. */
 export const GlobalArgs = z.object({
   host: z.string().regex(/^[A-Za-z0-9.\-:\[\]]+$/, "host is a hostname or IP, without scheme or path")
-    .describe("Hostname or IP address of the NAS, e.g. nas.lan or 192.168.1.10"),
+    .describe("Hostname or IP address of the NAS, e.g. nas.example.com or 192.0.2.10"),
   port: z.number().int().min(1).max(65535).default(443).describe("HTTPS port of the web UI"),
   username: z.string().default("truenas_admin").describe("User the API key belongs to"),
   apiKey: z.string().min(1).meta({ sensitive: true })
@@ -117,6 +117,14 @@ export async function withSession<T>(
 type Raw = Record<string, any>;
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
 
+/** Check that a query method returned a list, so a changed API fails with a clear message. */
+export function asList(method: string, value: unknown): Raw[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${method}: expected a list, got ${value === null ? "null" : typeof value}`);
+  }
+  return value;
+}
+
 /** Map one `pool.query` entry onto the `pool` resource. */
 export function toPool(p: Raw): z.infer<typeof PoolSchema> {
   const size = num(p.size);
@@ -174,9 +182,9 @@ export function toAlerts(list: Raw[]): z.infer<typeof AlertsSchema> {
   };
 }
 
-/** Swamp behavior definition for `@moeealii/truenas`. */
+/** Swamp behavior definition for `@me__zlxp/truenas`. */
 export const model = {
-  type: "@moeealii/truenas",
+  type: "@me__zlxp/truenas",
   version: "2026.10.24.1",
   globalArguments: GlobalArgs,
   resources: {
@@ -225,6 +233,7 @@ export const model = {
       kind: "read",
       arguments: z.object({}),
       execute: async (args: Injected, context: Ctx) => {
+        context.logger.info("Reading system info from {host}", { host: context.globalArgs.host });
         const info = await withSession(context.globalArgs, (c) => c.call<Raw>("system.info"), args._connect);
         const handle = await context.writeResource("system", "system", {
           hostname: String(info.hostname),
@@ -248,9 +257,10 @@ export const model = {
       kind: "list",
       arguments: z.object({}),
       execute: async (args: Injected, context: Ctx) => {
+        context.logger.info("Reading ZFS pools from {host}", { host: context.globalArgs.host });
         const pools = await withSession(
           context.globalArgs,
-          (c) => c.call<Raw[]>("pool.query"),
+          (c) => c.call<unknown>("pool.query").then((r) => asList("pool.query", r)),
           args._connect,
         );
         const handles = [];
@@ -271,7 +281,12 @@ export const model = {
       kind: "list",
       arguments: z.object({}),
       execute: async (args: Injected, context: Ctx) => {
-        const apps = await withSession(context.globalArgs, (c) => c.call<Raw[]>("app.query"), args._connect);
+        context.logger.info("Reading apps from {host}", { host: context.globalArgs.host });
+        const apps = await withSession(
+          context.globalArgs,
+          (c) => c.call<unknown>("app.query").then((r) => asList("app.query", r)),
+          args._connect,
+        );
         const handles = [];
         for (const raw of apps) {
           const app = toApp(raw);
@@ -290,7 +305,12 @@ export const model = {
       kind: "list",
       arguments: z.object({}),
       execute: async (args: Injected, context: Ctx) => {
-        const list = await withSession(context.globalArgs, (c) => c.call<Raw[]>("alert.list"), args._connect);
+        context.logger.info("Reading alerts from {host}", { host: context.globalArgs.host });
+        const list = await withSession(
+          context.globalArgs,
+          (c) => c.call<unknown>("alert.list").then((r) => asList("alert.list", r)),
+          args._connect,
+        );
         const summary = toAlerts(list);
         const handle = await context.writeResource("alerts", "alerts", summary);
         context.logger.info(
@@ -320,16 +340,25 @@ async function changeAppState(
   args: z.infer<typeof AppNameArgs> & Injected,
   context: Ctx,
 ): Promise<{ dataHandles: Handle[] }> {
+  const target = method === "app.start" ? "RUNNING" : "STOPPED";
+  context.logger.info("{method} {name}: connecting", { method, name: args.name });
   const app = await withSession(context.globalArgs, async (c) => {
-    const found = await c.call<Raw[]>("app.query", [[["name", "=", args.name]]]);
+    const query = () =>
+      c.call<unknown>("app.query", [[["name", "=", args.name]]]).then((r) => asList("app.query", r));
+    const found = await query();
     if (found.length === 0) throw new Error(`no app named "${args.name}"`);
+    if (found[0].state === target) {
+      // Already where we want it: nothing to do, and no job to wait for.
+      context.logger.info("{name} is already {state}; nothing to do", { name: args.name, state: target });
+      return toApp(found[0]);
+    }
     context.logger.info("{method} {name} (currently {state})", {
       method,
       name: args.name,
       state: found[0].state,
     });
     await c.job(method, [args.name], args.timeoutSeconds * 1000);
-    const [after] = await c.call<Raw[]>("app.query", [[["name", "=", args.name]]]);
+    const [after] = await query();
     return toApp(after ?? found[0]);
   }, args._connect);
   const handle = await context.writeResource("app", instanceName("app", app.name), app);

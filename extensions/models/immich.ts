@@ -1,5 +1,5 @@
 /**
- * `@moeealii/immich`: library statistics, disk usage, background queues and
+ * `@me__zlxp/immich`: library statistics, disk usage, background queues and
  * albums from an Immich server's REST API (Immich 2.x and 3.x).
  *
  * @module
@@ -11,7 +11,7 @@ import { instanceName, now } from "./lib/names.ts";
 /** Global arguments shared by every method. */
 export const GlobalArgs = z.object({
   url: z.string().regex(/^https?:\/\/[^/\s]+(\/.*)?$/, "url must be http(s)://host[:port]")
-    .describe("Base URL of the Immich server, e.g. http://nas.lan:2283 (without /api)"),
+    .describe("Base URL of the Immich server, e.g. http://nas.example.com:2283 (without /api)"),
   apiKey: z.string().min(1).meta({ sensitive: true })
     .describe("Immich API key (Account Settings → API Keys). Supply it from a vault"),
   timeoutSeconds: z.number().int().min(1).max(300).default(30).describe("Per-request timeout"),
@@ -111,9 +111,9 @@ export function toQueue(q: Raw): z.infer<typeof QueueSchema> {
   };
 }
 
-/** Swamp behavior definition for `@moeealii/immich`. */
+/** Swamp behavior definition for `@me__zlxp/immich`. */
 export const model = {
-  type: "@moeealii/immich",
+  type: "@me__zlxp/immich",
   version: "2026.10.24.1",
   globalArguments: GlobalArgs,
   resources: {
@@ -154,6 +154,7 @@ export const model = {
       kind: "read",
       arguments: z.object({}),
       execute: async (args: Injected, context: Ctx) => {
+        context.logger.info("Reading library statistics from {url}", { url: context.globalArgs.url });
         const [version, stats] = await Promise.all([
           api<Raw>(context, "server/version", args),
           api<Raw>(context, "server/statistics", args),
@@ -176,6 +177,7 @@ export const model = {
       kind: "read",
       arguments: z.object({}),
       execute: async (args: Injected, context: Ctx) => {
+        context.logger.info("Reading storage from {url}", { url: context.globalArgs.url });
         const s = await api<Raw>(context, "server/storage", args);
         const data = {
           sizeBytes: Number(s.diskSizeRaw) || 0,
@@ -194,6 +196,7 @@ export const model = {
       kind: "list",
       arguments: z.object({}),
       execute: async (args: Injected, context: Ctx) => {
+        context.logger.info("Reading job queues from {url}", { url: context.globalArgs.url });
         const queues = (await api<Raw[]>(context, "queues", args)).map(toQueue);
         const handles = [];
         for (const q of queues) {
@@ -219,6 +222,7 @@ export const model = {
       kind: "list",
       arguments: z.object({}),
       execute: async (args: Injected, context: Ctx) => {
+        context.logger.info("Reading albums from {url}", { url: context.globalArgs.url });
         const albums = await api<Raw[]>(context, "albums", args);
         const handles = [];
         for (const a of albums) {

@@ -9,10 +9,10 @@ type Ctx = any;
 
 const STREAMS = {
   front_door: {
-    producers: [{ url: "rtsp://admin:hunter2@192.168.1.20:554/live", medias: ["video, recvonly, H264"] }],
-    consumers: [{ remote_addr: "192.168.1.50" }],
+    producers: [{ url: "rtsp://admin:hunter2@192.0.2.20:554/live", medias: ["video, recvonly, H264"] }],
+    consumers: [{ remote_addr: "192.0.2.50" }],
   },
-  backyard: { producers: [{ url: "rtsp://192.168.1.21/live" }], consumers: null },
+  backyard: { producers: [{ url: "rtsp://192.0.2.21/live" }], consumers: null },
 };
 
 function fakeGo2rtc(frames: Record<string, Response>) {
@@ -40,7 +40,7 @@ Deno.test("streams: writes each stream with credentials stripped from its source
   await model.methods.streams.execute({ _fetch: api.impl }, context as Ctx);
   const [front, back] = getWrittenResources();
   assertEquals(front.name, "stream-front_door");
-  assertEquals(front.data.sources, ["rtsp://192.168.1.20:554/live"]);
+  assertEquals(front.data.sources, ["rtsp://192.0.2.20:554/live"]);
   assertEquals([front.data.activeProducers, front.data.consumers], [1, 1]);
   assertEquals([back.data.activeProducers, back.data.consumers], [0, 0]);
   for (const r of getWrittenResources()) assertEquals(JSON.stringify(r.data).includes("hunter2"), false);
@@ -49,7 +49,7 @@ Deno.test("streams: writes each stream with credentials stripped from its source
 Deno.test("health: a stream is online only if go2rtc returns a JPEG frame", async () => {
   const api = fakeGo2rtc({
     front_door: jpeg(),
-    backyard: new Response("dial tcp 192.168.1.21:554: i/o timeout", { status: 500 }),
+    backyard: new Response("dial tcp 192.0.2.21:554: i/o timeout", { status: 500 }),
   });
   const { context, getWrittenResources } = createModelTestContext({
     globalArgs: { ...globalArgs, username: "admin", password: "pw" },
@@ -60,7 +60,7 @@ Deno.test("health: a stream is online only if go2rtc returns a JPEG frame", asyn
   assertEquals(byName["health-front_door"].frameBytes, 4);
   assertEquals(byName["health-backyard"].online, false);
   assertStringIncludes(String(byName["health-backyard"].error), "i/o timeout");
-  assertEquals(byName["health-summary"].offline, ["backyard"]);
+  assertEquals(byName["summary"].offline, ["backyard"]);
   assertEquals(api.auth.every((a) => a === `Basic ${btoa("admin:pw")}`), true);
 });
 
@@ -68,10 +68,19 @@ Deno.test("health: can check a chosen subset of streams", async () => {
   const api = fakeGo2rtc({ backyard: jpeg() });
   const { context, getWrittenResources } = createModelTestContext({ globalArgs });
   await model.methods.health.execute({ streams: ["backyard"], _fetch: api.impl }, context as Ctx);
-  assertEquals(getWrittenResources().map((r) => r.name), ["health-backyard", "health-summary"]);
+  assertEquals(getWrittenResources().map((r) => r.name), ["health-backyard", "summary"]);
 });
 
 Deno.test("toStream: handles a stream with no producers or consumers", () => {
   const s = toStream("empty", null);
   assertEquals([s.sources, s.activeProducers, s.consumers], [[], 0, 0]);
+});
+
+Deno.test("health: a camera named summary does not overwrite the summary", async () => {
+  const api = fakeGo2rtc({ summary: jpeg() });
+  const { context, getWrittenResources } = createModelTestContext({ globalArgs });
+  await model.methods.health.execute({ streams: ["summary"], _fetch: api.impl }, context as Ctx);
+  const names = getWrittenResources().map((r) => r.name);
+  assertEquals(names, ["health-summary", "summary"]);
+  assertEquals(new Set(names).size, names.length);
 });

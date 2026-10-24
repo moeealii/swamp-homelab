@@ -1,5 +1,5 @@
 id: cb77abc0-4b8c-42ae-8812-0a8c9f63683c
-name: '@moeealii/homelab-health'
+name: '@me__zlxp/homelab-health'
 description: Check the whole homelab in one run. Every check is independent, so they run in parallel and one failure does not hide the others.
 jobs:
   - name: health

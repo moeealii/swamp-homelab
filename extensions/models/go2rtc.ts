@@ -1,5 +1,5 @@
 /**
- * `@moeealii/go2rtc`: list a go2rtc server's camera streams and check that
+ * `@me__zlxp/go2rtc`: list a go2rtc server's camera streams and check that
  * each one actually produces video, by asking go2rtc for a fresh frame.
  *
  * @module
@@ -11,7 +11,7 @@ import { instanceName, now } from "./lib/names.ts";
 /** Global arguments shared by every method. */
 export const GlobalArgs = z.object({
   url: z.string().regex(/^https?:\/\/[^/\s]+(\/.*)?$/, "url must be http(s)://host[:port]")
-    .describe("Base URL of go2rtc's API, e.g. http://nas.lan:1984"),
+    .describe("Base URL of go2rtc's API, e.g. http://nas.example.com:1984"),
   username: z.string().optional().describe("Basic-auth user, when go2rtc's api.username is set"),
   password: z.string().optional().meta({ sensitive: true }).describe(
     "Basic-auth password. Supply it from a vault",
@@ -88,9 +88,9 @@ export function toStream(name: string, s: Raw | null): z.infer<typeof StreamSche
   };
 }
 
-/** Swamp behavior definition for `@moeealii/go2rtc`. */
+/** Swamp behavior definition for `@me__zlxp/go2rtc`. */
 export const model = {
-  type: "@moeealii/go2rtc",
+  type: "@me__zlxp/go2rtc",
   version: "2026.10.24.1",
   globalArguments: GlobalArgs,
   resources: {
@@ -119,6 +119,7 @@ export const model = {
       kind: "list",
       arguments: z.object({}),
       execute: async (args: Injected, context: Ctx) => {
+        context.logger.info("Reading streams from {url}", { url: context.globalArgs.url });
         const all = await getJson<Record<string, Raw | null>>(
           joinUrl(context.globalArgs.url, "/api/streams"),
           options(context, args),
@@ -138,6 +139,7 @@ export const model = {
       kind: "read",
       arguments: HealthArgs,
       execute: async (args: z.infer<typeof HealthArgs> & Injected, context: Ctx) => {
+        context.logger.info("Checking camera frames on {url}", { url: context.globalArgs.url });
         const opts = options(context, args);
         const names = args.streams ??
           Object.keys(
@@ -191,7 +193,7 @@ export const model = {
           offline: results.filter((r) => !r.online).map((r) => r.name),
           timestamp: now(),
         };
-        handles.push(await context.writeResource("healthSummary", "health-summary", summary));
+        handles.push(await context.writeResource("healthSummary", "summary", summary));
         context.logger.info("{online}/{total} streams online; offline: {offline}", {
           online: summary.online.length,
           total: results.length,

@@ -1,5 +1,5 @@
 manifestVersion: 1
-name: "@moeealii/homelab"
+name: "@me__zlxp/homelab"
 version: "2026.10.24.1"
 license: MIT
 description: "Homelab health as swamp data: TrueNAS SCALE pools, apps and alerts over its JSON-RPC API with certificate pinning, Immich library and job queues, and go2rtc camera streams checked frame by frame."

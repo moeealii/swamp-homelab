@@ -235,3 +235,32 @@ Deno.test("pinned-certificate-is-pem: rejects something that is not a certificat
   const pem = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
   assertEquals(await check({ globalArgs: { ...globalArgs, certificatePem: pem } } as Ctx), { pass: true });
 });
+
+Deno.test("startApp: an app that is already running is left alone", async () => {
+  const nas = fakeTrueNas({ "app.query": () => [{ name: "immich", state: "RUNNING" }] });
+  try {
+    const { context, getWrittenResources } = createModelTestContext({ globalArgs });
+    await model.methods.startApp.execute(
+      { name: "immich", timeoutSeconds: 60, _connect: nas.connect },
+      context as Ctx,
+    );
+    assertEquals(nas.calls.map((c) => c.method), ["auth.login_ex", "app.query"], "no job was started");
+    assertEquals(getWrittenResources()[0].data.state, "RUNNING");
+  } finally {
+    await nas.close();
+  }
+});
+
+Deno.test("asList: a non-list result fails with the method name", async () => {
+  const nas = fakeTrueNas({ "pool.query": () => ({ unexpected: true }) });
+  try {
+    const { context } = createModelTestContext({ globalArgs });
+    await assertRejects(
+      () => model.methods.pools.execute({ _connect: nas.connect }, context as Ctx),
+      Error,
+      "pool.query: expected a list, got object",
+    );
+  } finally {
+    await nas.close();
+  }
+});
